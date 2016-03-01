@@ -10,8 +10,10 @@
   
 */
 
+#include "avr/interrupt.h"
+
 // setup them pins
-const int inputPins[] = {0};
+//const int inputPins[] = {0};
 const int outputPins[] = {1,2};
 const int potPins[] = {3,4};
 
@@ -20,52 +22,75 @@ int inputCounter = 0;   // counter for the number of button presses
 int inputState = 0;         // current state of the button
 int lastInputState = 0;     // previous state of the button
 
-
 byte outputState = 0;
+int pulseStart = 0; 
+
+// pot values
+int clockDivider = 0; 
+int stepLength = 0;
+
+
 
 // the setup function runs once when you press reset or power the board
 void setup() {
 
-  for (int thisPin = 0; thisPin < sizeof(inputPins); thisPin++) {
+  /*for (int thisPin = 0; thisPin < sizeof(inputPins); thisPin++) {
     pinMode(inputPins[thisPin], INPUT);
-  }
+  }*/
 
   for (int thisPin = 0; thisPin < sizeof(outputPins); thisPin++) {
     pinMode(outputPins[thisPin], OUTPUT);
   }
-  
+
+  GIMSK = 0b00100000;    // turns on pin change interrupts
+  PCMSK = 0b00000001;    // turn on interrupts on pins PB0, PB1, &amp; PB4
+  sei();        
 }
 
 // the loop function runs over and over again forever
 void loop() {
-  
-  inputState = digitalRead(inputPins[0]);
+
+  clockDivider = analogRead(potPins[0]);
+  // map it to the range of the analog out:
+  clockDivider = map(clockDivider, 1, 1023, 0, 32);
+
+  stepLength = analogRead(potPins[1]);
+  // map it to the range of the analog out:
+  //stepLength = map(stepLength, 0, 1023, 0, 255);
+
   if (inputState != lastInputState) {
-    if (inputState == HIGH) { // if the state has changed, increment the counter
+    if (inputState == HIGH) { // if the state has changed, increment the counter   
+      
+      if ( inputCounter % clockDivider == 0 ) {
+        outputState = HIGH;
+        inputState = LOW;
+      }
+
       inputCounter++;
-    } else {
-      // if the current state is LOW then the button wend from on to off:
       
     }
-  }
-  // save the current state as the last state,
-  //for next time through the loop
-  lastInputState = inputState;
-
-
-  // turns on the LED every four button pushes by checking the modulo of the button push counter.
-  // the modulo function gives you the remainder of the division of two numbers:
-  if (inputCounter % 4 == 0) {
-    trigger(1);
+    
+    lastInputState = inputState;
+    
   } else {
-    trigger(2);
+    if( millis() - pulseStart  >= stepLength){
+      inputState = LOW;
+      outputState = LOW;
+    }
   }
+
+  trigger();
   
 }
 
-void trigger( int pin ) { 
-  digitalWrite(pin, HIGH);   // turn the LED on (HIGH is the voltage level)
-  delay(100);              // wait for a second
-  digitalWrite(pin, LOW);    // turn the LED off by making the voltage LOW
-  delay(100);  
+void trigger( ) { 
+  digitalWrite(outputPins[0], outputState);   // turn the LED on (HIGH is the voltage level)
+  digitalWrite(outputPins[1], !outputState);
+}
+
+
+ISR(PCINT0_vect)
+{
+  pulseStart = millis();
+  inputState = HIGH; 
 }
